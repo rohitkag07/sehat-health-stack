@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { getReportById } from '@/data/sampleReports';
+import { createClient } from '@/utils/supabase/client';
 
 interface BloodTestValue {
   name: string;
@@ -83,43 +84,79 @@ export default function ReportPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // First check if it's a sample report
-    const sampleReport = getReportById(reportId);
-    if (sampleReport) {
-      setReport(sampleReport);
+    async function fetchReport() {
+      // First check if it's a sample report
+      const sampleReport = getReportById(reportId);
+      if (sampleReport) {
+        setReport(sampleReport);
+        setLoading(false);
+        return;
+      }
+
+      // Try fetching from Supabase Database
+      const supabase = createClient();
+      const { data: dbReport, error } = await supabase
+        .from('reports')
+        .select('*')
+        .eq('id', reportId)
+        .single();
+
+      if (!error && dbReport && dbReport.analysis) {
+        setReport({
+          id: dbReport.id,
+          patientName: dbReport.patient_name || dbReport.analysis.patientName || 'Patient',
+          patientAge: dbReport.patient_age || dbReport.analysis.patientAge,
+          patientGender: dbReport.patient_gender || dbReport.analysis.patientGender,
+          labName: dbReport.lab_name || dbReport.analysis.labName,
+          reportDate: dbReport.test_date || dbReport.analysis.reportDate || new Date().toISOString().split('T')[0],
+          testType: dbReport.analysis.testType || 'Blood Test',
+          conditionTag: dbReport.analysis.conditionTag || '🧪 Analysis',
+          urgency: dbReport.analysis.urgency || 'low',
+          overallStatus: dbReport.analysis.overallStatus || 'Analysis Complete',
+          summary: dbReport.analysis.summary,
+          aiSummary: dbReport.analysis.summary,
+          values: dbReport.analysis.values || [],
+          recommendations: dbReport.analysis.recommendations || [],
+          doctorNote: dbReport.analysis.doctorNote || 'No clinical notes available.',
+          fileName: dbReport.file_name,
+          analyzedAt: dbReport.analyzed_at,
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Check localStorage fallback
+      const stored = localStorage.getItem(`report-${reportId}`);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          setReport({
+            id: reportId,
+            patientName: parsed.patientName || 'Patient',
+            patientAge: parsed.patientAge,
+            patientGender: parsed.patientGender,
+            labName: parsed.labName,
+            reportDate: parsed.reportDate || new Date().toISOString().split('T')[0],
+            testType: parsed.testType || 'Blood Test',
+            conditionTag: parsed.conditionTag || '🧪 Analysis',
+            urgency: parsed.urgency || 'low',
+            overallStatus: parsed.overallStatus || 'Analysis Complete',
+            summary: parsed.summary,
+            aiSummary: parsed.summary,
+            values: parsed.values || [],
+            recommendations: parsed.recommendations || [],
+            doctorNote: parsed.doctorNote || 'No clinical notes available.',
+            fileName: parsed.fileName,
+            analyzedAt: parsed.analyzedAt,
+          });
+        } catch {
+          setReport(null);
+        }
+      }
       setLoading(false);
-      return;
     }
 
-    // Check localStorage for live analysis results
-    const stored = localStorage.getItem(`report-${reportId}`);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setReport({
-          id: reportId,
-          patientName: parsed.patientName || 'Patient',
-          patientAge: parsed.patientAge,
-          patientGender: parsed.patientGender,
-          labName: parsed.labName,
-          reportDate: parsed.reportDate || new Date().toISOString().split('T')[0],
-          testType: parsed.testType || 'Blood Test',
-          conditionTag: parsed.conditionTag || '🧪 Analysis',
-          urgency: parsed.urgency || 'low',
-          overallStatus: parsed.overallStatus || 'Analysis Complete',
-          summary: parsed.summary,
-          aiSummary: parsed.summary,
-          values: parsed.values || [],
-          recommendations: parsed.recommendations || [],
-          doctorNote: parsed.doctorNote || 'No clinical notes available.',
-          fileName: parsed.fileName,
-          analyzedAt: parsed.analyzedAt,
-        });
-      } catch {
-        setReport(null);
-      }
-    }
-    setLoading(false);
+    fetchReport();
   }, [reportId]);
 
   if (loading) {
@@ -222,9 +259,9 @@ export default function ReportPage() {
                 <div
                   key={idx}
                   className={`p-4 rounded-xl border-l-4 ${item.severity === 'critical' ? 'border-red-500 bg-red-50 dark:bg-red-900/10'
-                      : item.severity === 'high' ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/10'
-                        : item.severity === 'medium' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/10'
-                          : 'border-blue-400 bg-blue-50 dark:bg-blue-900/10'
+                    : item.severity === 'high' ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/10'
+                      : item.severity === 'medium' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/10'
+                        : 'border-blue-400 bg-blue-50 dark:bg-blue-900/10'
                     }`}
                 >
                   <div className="flex justify-between items-start flex-wrap gap-2">

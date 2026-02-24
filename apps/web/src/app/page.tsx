@@ -1,13 +1,18 @@
 import Link from "next/link";
 
-export default function Home() {
+import { createClient } from '@/utils/supabase/server'
+
+export default async function Home() {
+  const supabase = await createClient()
+  const { data: { session } } = await supabase.auth.getSession()
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-black">
       {/* Navigation */}
       <nav className="border-b bg-white/80 backdrop-blur dark:bg-black/80">
         <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-blue-600">🏥 Sehat</h1>
-          <div className="flex gap-6">
+          <div className="flex gap-6 items-center">
             <Link href="/samples" className="text-gray-600 hover:text-blue-600 dark:text-gray-300 font-semibold">
               🧪 Samples
             </Link>
@@ -17,9 +22,22 @@ export default function Home() {
             <Link href="/medicines" className="text-gray-600 hover:text-blue-600 dark:text-gray-300">
               Medicines
             </Link>
-            <Link href="/login" className="text-gray-600 hover:text-blue-600 dark:text-gray-300">
-              Login
-            </Link>
+            {session ? (
+              <>
+                <Link href="/dashboard" className="text-blue-600 font-medium">
+                  Dashboard
+                </Link>
+                <form action="/auth/logout" method="post">
+                  <button type="submit" className="text-gray-600 hover:text-red-600 dark:text-gray-300">
+                    Logout
+                  </button>
+                </form>
+              </>
+            ) : (
+              <Link href="/login" className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition">
+                Login
+              </Link>
+            )}
           </div>
         </div>
       </nav>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { createClient } from '@/utils/supabase/server';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
@@ -113,11 +114,40 @@ export async function POST(request: NextRequest) {
             const jsonMatch = text.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
                 const analysis = JSON.parse(jsonMatch[0]);
+
+                // SAVE TO DATABASE (If logged in)
+                const supabase = await createClient();
+                const { data: { user } } = await supabase.auth.getUser();
+
+                let dbReportId = null;
+
+                if (user) {
+                    const { data: insertedReport, error } = await supabase.from('reports').insert({
+                        user_id: user.id,
+                        file_name: file.name,
+                        mime_type: file.type,
+                        patient_name: analysis.patientName,
+                        patient_age: analysis.patientAge,
+                        patient_gender: analysis.patientGender?.toLowerCase() || null,
+                        lab_name: analysis.labName,
+                        analysis: analysis,
+                        status: 'completed',
+                        analyzed_at: new Date().toISOString()
+                    }).select('id').single();
+
+                    if (!error && insertedReport) {
+                        dbReportId = insertedReport.id;
+                    } else {
+                        console.error('Failed to save to DB:', error);
+                    }
+                }
+
                 return NextResponse.json({
                     success: true,
                     analysis,
                     fileName: file.name,
                     fileType: file.type,
+                    reportId: dbReportId
                 });
             } else {
                 return NextResponse.json({ error: 'Could not parse AI response' }, { status: 500 });
@@ -147,11 +177,39 @@ export async function POST(request: NextRequest) {
 
         const analysis = JSON.parse(jsonMatch[0]);
 
+        // SAVE TO DATABASE (If logged in)
+        const supabase = await createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+
+        let dbReportId = null;
+
+        if (user) {
+            const { data: insertedReport, error } = await supabase.from('reports').insert({
+                user_id: user.id,
+                file_name: file.name,
+                mime_type: file.type,
+                patient_name: analysis.patientName,
+                patient_age: analysis.patientAge,
+                patient_gender: analysis.patientGender?.toLowerCase() || null,
+                lab_name: analysis.labName,
+                analysis: analysis,
+                status: 'completed',
+                analyzed_at: new Date().toISOString()
+            }).select('id').single();
+
+            if (!error && insertedReport) {
+                dbReportId = insertedReport.id;
+            } else {
+                console.error('Failed to save to DB:', error);
+            }
+        }
+
         return NextResponse.json({
             success: true,
             analysis,
             fileName: file.name,
             fileType: file.type,
+            reportId: dbReportId,
             extractedTextLength: reportText.length,
         });
 
