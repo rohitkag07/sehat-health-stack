@@ -8,6 +8,9 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-blue-600">🏥 Sehat</h1>
           <div className="flex gap-6">
+            <Link href="/samples" className="text-gray-600 hover:text-blue-600 dark:text-gray-300 font-semibold">
+              🧪 Samples
+            </Link>
             <Link href="/labs" className="text-gray-600 hover:text-blue-600 dark:text-gray-300">
               Labs
             </Link>
