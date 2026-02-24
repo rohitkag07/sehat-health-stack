@@ -1,0 +1,30 @@
+{
+  "name": "sehat",
+  "version": "0.1.0",
+  "private": true,
+  "description": "India's most trusted healthcare comparison ecosystem",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "tools/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:web\" \"npm run dev:backend\"",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "dev:backend": "npm run dev --workspace=apps/backend",
+    "build": "npm run build --workspaces",
+    "lint": "npm run lint --workspaces",
+    "test": "npm run test --workspaces",
+    "db:generate": "supabase gen types typescript --project-id your-project-id > packages/database/types.ts",
+    "db:migrate": "supabase db push"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "dotenv": "^17.3.1"
+  }
+}
