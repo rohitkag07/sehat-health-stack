@@ -1,8 +1,40 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { getReportById, sampleReports, type BloodTestValue } from '@/data/sampleReports';
+import { getReportById } from '@/data/sampleReports';
+
+interface BloodTestValue {
+  name: string;
+  value: string;
+  unit: string;
+  normalRange: string;
+  status: string;
+  severity: string;
+  explanation?: string | null;
+}
+
+interface ReportData {
+  id: string;
+  patientName?: string;
+  patientAge?: number;
+  patientGender?: string;
+  labName?: string;
+  reportDate?: string;
+  testType?: string;
+  condition?: string;
+  conditionTag: string;
+  urgency: string;
+  overallStatus: string;
+  summary?: string;
+  aiSummary?: string;
+  values: BloodTestValue[];
+  recommendations: string[];
+  doctorNote: string;
+  fileName?: string;
+  analyzedAt?: string;
+}
 
 function StatusBadge({ status, severity }: { status: string; severity: string }) {
   const colors: Record<string, string> = {
@@ -13,16 +45,9 @@ function StatusBadge({ status, severity }: { status: string; severity: string })
     none: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
   };
 
-  const labels: Record<string, string> = {
-    critical: '↑ Critical',
-    high: status === 'low' ? '↓ Low' : '↑ High',
-    low: status === 'low' ? '↓ Low' : '↑ High',
-    normal: '✓ Normal',
-  };
-
   return (
     <span className={`px-3 py-1 rounded-full text-xs font-bold ${colors[severity] || colors.none}`}>
-      {status === 'normal' ? '✓ Normal' : labels[status] || status}
+      {status === 'normal' ? '✓ Normal' : status === 'low' ? '↓ Low' : status === 'critical' ? '🔴 Critical' : '↑ High'}
     </span>
   );
 }
@@ -54,27 +79,86 @@ function UrgencyBanner({ urgency, overallStatus }: { urgency: string; overallSta
 export default function ReportPage() {
   const params = useParams();
   const reportId = params.id as string;
-  const report = getReportById(reportId);
+  const [report, setReport] = useState<ReportData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // First check if it's a sample report
+    const sampleReport = getReportById(reportId);
+    if (sampleReport) {
+      setReport(sampleReport);
+      setLoading(false);
+      return;
+    }
+
+    // Check localStorage for live analysis results
+    const stored = localStorage.getItem(`report-${reportId}`);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        setReport({
+          id: reportId,
+          patientName: parsed.patientName || 'Patient',
+          patientAge: parsed.patientAge,
+          patientGender: parsed.patientGender,
+          labName: parsed.labName,
+          reportDate: parsed.reportDate || new Date().toISOString().split('T')[0],
+          testType: parsed.testType || 'Blood Test',
+          conditionTag: parsed.conditionTag || '🧪 Analysis',
+          urgency: parsed.urgency || 'low',
+          overallStatus: parsed.overallStatus || 'Analysis Complete',
+          summary: parsed.summary,
+          aiSummary: parsed.summary,
+          values: parsed.values || [],
+          recommendations: parsed.recommendations || [],
+          doctorNote: parsed.doctorNote || 'No clinical notes available.',
+          fileName: parsed.fileName,
+          analyzedAt: parsed.analyzedAt,
+        });
+      } catch {
+        setReport(null);
+      }
+    }
+    setLoading(false);
+  }, [reportId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-black flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-blue-200 border-t-blue-600 mx-auto mb-4"></div>
+          <p className="text-lg text-gray-600">Loading report...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!report) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-black">
         <nav className="border-b bg-white/80 backdrop-blur dark:bg-black/80">
-          <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
+          <div className="max-w-6xl mx-auto px-4 py-4">
             <Link href="/" className="text-2xl font-bold text-blue-600">🏥 Sehat</Link>
           </div>
         </nav>
         <main className="max-w-4xl mx-auto px-4 py-20 text-center">
-          <h1 className="text-4xl font-bold mb-4">Report Not Found</h1>
-          <p className="text-gray-600 mb-8">Is ID ka koi report nahi mila.</p>
-          <Link href="/samples" className="bg-blue-600 text-white px-8 py-3 rounded-full font-semibold hover:bg-blue-700 transition">
-            View Sample Reports →
-          </Link>
+          <div className="text-6xl mb-4">🔍</div>
+          <h1 className="text-3xl font-bold mb-4">Report Not Found</h1>
+          <p className="text-gray-600 mb-8">Is ID ka koi report nahi mila. Shayad expire ho gaya hai.</p>
+          <div className="flex gap-4 justify-center">
+            <Link href="/upload" className="bg-blue-600 text-white px-8 py-3 rounded-full font-semibold hover:bg-blue-700 transition">
+              📄 Upload Report
+            </Link>
+            <Link href="/samples" className="border-2 border-blue-600 text-blue-600 px-8 py-3 rounded-full font-semibold hover:bg-blue-50 transition">
+              🧪 View Samples
+            </Link>
+          </div>
         </main>
       </div>
     );
   }
 
+  const summaryText = report.summary || report.aiSummary || '';
   const abnormalValues = report.values.filter(v => v.status !== 'normal');
   const normalValues = report.values.filter(v => v.status === 'normal');
 
@@ -85,6 +169,7 @@ export default function ReportPage() {
         <div className="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
           <Link href="/" className="text-2xl font-bold text-blue-600">🏥 Sehat</Link>
           <div className="flex gap-6">
+            <Link href="/upload" className="text-gray-600 hover:text-blue-600 dark:text-gray-300">Upload</Link>
             <Link href="/samples" className="text-gray-600 hover:text-blue-600 dark:text-gray-300">Samples</Link>
             <Link href="/labs" className="text-gray-600 hover:text-blue-600 dark:text-gray-300">Labs</Link>
           </div>
@@ -92,21 +177,31 @@ export default function ReportPage() {
       </nav>
 
       <main className="max-w-4xl mx-auto px-4 py-12">
+        {/* Source indicator for live reports */}
+        {report.fileName && (
+          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-3 mb-4 text-sm text-center text-blue-700 dark:text-blue-300">
+            📄 Analyzed file: <strong>{report.fileName}</strong>
+            {report.analyzedAt && ` • ${new Date(report.analyzedAt).toLocaleString('hi-IN')}`}
+          </div>
+        )}
+
         {/* Patient Info */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 mb-6 shadow-sm">
           <div className="flex flex-wrap justify-between items-start gap-4">
             <div>
-              <h2 className="text-xl font-bold">{report.patientName}</h2>
-              <p className="text-gray-500">{report.age} yrs • {report.gender} • {report.reportDate}</p>
-              <p className="text-gray-500 text-sm">{report.labName}</p>
+              <h2 className="text-xl font-bold">{report.patientName || 'Patient'}</h2>
+              <p className="text-gray-500">
+                {report.patientAge ? `${report.patientAge} yrs • ` : ''}
+                {report.patientGender ? `${report.patientGender} • ` : ''}
+                {report.reportDate || ''}
+              </p>
+              {report.labName && <p className="text-gray-500 text-sm">{report.labName}</p>}
             </div>
-            <div>
-              <span className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 px-4 py-2 rounded-full text-sm font-bold">
-                {report.conditionTag}
-              </span>
-            </div>
+            <span className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 px-4 py-2 rounded-full text-sm font-bold">
+              {report.conditionTag}
+            </span>
           </div>
-          <p className="text-sm text-gray-500 mt-2">Test: {report.testType}</p>
+          {report.testType && <p className="text-sm text-gray-500 mt-2">Test: {report.testType}</p>}
         </div>
 
         {/* Urgency Banner */}
@@ -114,12 +209,8 @@ export default function ReportPage() {
 
         {/* AI Summary */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 mb-8 shadow-sm">
-          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-            🤖 AI Summary (Hindi)
-          </h2>
-          <p className="text-lg text-gray-700 dark:text-gray-300 leading-relaxed">
-            {report.aiSummary}
-          </p>
+          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">🤖 AI Summary (Hindi)</h2>
+          <p className="text-lg text-gray-700 dark:text-gray-300 leading-relaxed">{summaryText}</p>
         </div>
 
         {/* Abnormal Values */}
@@ -130,12 +221,9 @@ export default function ReportPage() {
               {abnormalValues.map((item, idx) => (
                 <div
                   key={idx}
-                  className={`p-4 rounded-xl border-l-4 ${item.severity === 'critical'
-                      ? 'border-red-500 bg-red-50 dark:bg-red-900/10'
-                      : item.severity === 'high'
-                        ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/10'
-                        : item.severity === 'medium'
-                          ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/10'
+                  className={`p-4 rounded-xl border-l-4 ${item.severity === 'critical' ? 'border-red-500 bg-red-50 dark:bg-red-900/10'
+                      : item.severity === 'high' ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/10'
+                        : item.severity === 'medium' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/10'
                           : 'border-blue-400 bg-blue-50 dark:bg-blue-900/10'
                     }`}
                 >
@@ -146,9 +234,7 @@ export default function ReportPage() {
                         Value: <strong>{item.value} {item.unit}</strong> &nbsp;|&nbsp; Normal: {item.normalRange} {item.unit}
                       </p>
                       {item.explanation && (
-                        <p className="text-sm mt-1 text-gray-700 dark:text-gray-300 italic">
-                          💡 {item.explanation}
-                        </p>
+                        <p className="text-sm mt-1 text-gray-700 dark:text-gray-300 italic">💡 {item.explanation}</p>
                       )}
                     </div>
                     <StatusBadge status={item.status} severity={item.severity} />
@@ -189,33 +275,26 @@ export default function ReportPage() {
 
         {/* Doctor Verification Note */}
         <div className="bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-300 dark:border-blue-700 rounded-2xl p-6 mb-8">
-          <h2 className="text-xl font-bold mb-3 flex items-center gap-2">
-            🩺 Doctor Verification Note
-          </h2>
-          <p className="text-gray-700 dark:text-gray-300 leading-relaxed font-mono text-sm">
-            {report.doctorNote}
-          </p>
+          <h2 className="text-xl font-bold mb-3 flex items-center gap-2">🩺 Doctor Verification Note</h2>
+          <p className="text-gray-700 dark:text-gray-300 leading-relaxed font-mono text-sm">{report.doctorNote}</p>
         </div>
 
         {/* Actions */}
         <div className="flex flex-wrap gap-4">
-          <Link
-            href="/samples"
-            className="flex-1 min-w-[150px] bg-blue-600 text-white px-6 py-4 rounded-xl font-semibold hover:bg-blue-700 transition text-center"
-          >
-            ← All Samples
+          <Link href="/upload" className="flex-1 min-w-[150px] bg-blue-600 text-white px-6 py-4 rounded-xl font-semibold hover:bg-blue-700 transition text-center">
+            📄 Upload Another Report
           </Link>
-          <Link
-            href="/labs"
-            className="flex-1 min-w-[150px] border-2 border-blue-600 text-blue-600 px-6 py-4 rounded-xl font-semibold hover:bg-blue-50 transition text-center"
-          >
+          <Link href="/samples" className="flex-1 min-w-[150px] border-2 border-blue-600 text-blue-600 px-6 py-4 rounded-xl font-semibold hover:bg-blue-50 transition text-center">
+            🧪 View Samples
+          </Link>
+          <Link href="/labs" className="flex-1 min-w-[150px] border-2 border-gray-300 text-gray-600 px-6 py-4 rounded-xl font-semibold hover:bg-gray-50 transition text-center">
             🔬 Book Follow-up
           </Link>
         </div>
 
         {/* Disclaimer */}
         <div className="mt-8 p-4 bg-gray-100 dark:bg-gray-900 rounded-xl text-sm text-gray-600 dark:text-gray-400">
-          <p>⚠️ <strong>Disclaimer:</strong> Ye AI analysis sirf informational purpose ke liye hai. Final diagnosis aur treatment ke liye qualified doctor se consult karein. Ye sample reports testing ke liye hain.</p>
+          <p>⚠️ <strong>Disclaimer:</strong> Ye AI analysis sirf informational purpose ke liye hai. Final diagnosis aur treatment ke liye qualified doctor se consult karein.</p>
         </div>
       </main>
     </div>
